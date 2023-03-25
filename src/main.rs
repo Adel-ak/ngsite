@@ -3,21 +3,20 @@ mod ng_enable_site;
 mod ng_select;
 mod utils;
 
+use anyhow::Result;
+use ng_disable_site::ng_disable_site;
+use ng_enable_site::ng_enable_site;
 use ng_select::{ng_select, NgSelect};
-use std::env;
+use utils::init_env;
 
-fn main() {
-    env::set_var("RUST_LOG", "Info");
-
-    pretty_env_logger::init();
+fn main() -> Result<()> {
+    init_env();
 
     let selection = ng_select();
     match selection {
-        NgSelect::Enable => {
-            log::warn!("Enable")
-        }
-        NgSelect::Disable => {
-            log::error!("Disable")
-        }
+        NgSelect::Enable => ng_enable_site()?,
+        NgSelect::Disable => ng_disable_site()?,
     }
+
+    Ok(())
 }

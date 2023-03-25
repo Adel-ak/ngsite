@@ -1,6 +1,12 @@
+use anyhow::Context;
+use anyhow::{anyhow, Result};
+use env_logger::fmt::Color;
+use log::Level;
 use std::collections::HashMap;
+use std::env;
 use std::fs::remove_file;
-use std::io::{self, ErrorKind};
+use std::io::ErrorKind;
+use std::io::Write;
 use std::os::unix::fs::symlink;
 use std::process::Command;
 use walkdir::WalkDir;
@@ -13,12 +19,12 @@ pub struct FileData {
     pub is_symlink: bool,
 }
 
-pub fn walk_folder(folder: &str) {
+pub fn walk_folder(folder: &str) -> Result<HashMap<String, FileData>> {
     let mut files: HashMap<String, FileData> = HashMap::new();
     let folder_name = format!("/etc/nginx/{}", folder);
     let iter = WalkDir::new(&folder_name).max_depth(1);
     for entry in iter {
-        let entry = entry.unwrap();
+        let entry = entry?;
         let file_name: String = entry.file_name().to_string_lossy().into();
         let is_symlink = entry.path_is_symlink();
         let is_dir = entry.into_path().is_dir();
@@ -35,59 +41,87 @@ pub fn walk_folder(folder: &str) {
 
         files.insert(key, value);
     }
+
+    Ok(files)
 }
 
-pub fn sym_link(file: String) -> Result<(), io::Error> {
+pub fn sym_link(file: String) -> Result<()> {
     let available_path = format!("/etc/nginx/{}/{}", AVAILABLE, file);
     let enabled_path = format!("/etc/nginx/{}/{}", ENABLED, file);
 
     let symlink_res = symlink(available_path, enabled_path);
 
-    if let Err(err) = &symlink_res {
+    if let Err(err) = symlink_res {
         if err.kind() == ErrorKind::AlreadyExists {
             let enabled_path = format!("/etc/nginx/{}/{}", ENABLED, file);
 
             remove_file(enabled_path)?;
             return sym_link(file);
         }
+
+        log::error!("Failed to symlink");
+        return Err(err.into());
     }
 
-    symlink_res
+    Ok(())
 }
 
-pub fn rm_symlink(file: String) -> Result<(), io::Error> {
+pub fn rm_symlink(file: String) -> Result<()> {
     let enabled_path = format!("/etc/nginx/{}/{}", ENABLED, file);
-    remove_file(enabled_path)
+    remove_file(enabled_path)?;
+    Ok(())
 }
 
-pub fn test_nginx() {
+pub fn test_nginx() -> Result<()> {
     let output = Command::new("nginx")
         .arg("-t")
         .output()
-        .expect("failed to execute process");
+        .context("Unable to test nginx, is it installed?")?;
 
-    if output.status.success() {
-        println!("Nginx test is successful");
-    } else {
-        println!("Nginx test is failed");
-        panic!("{}", String::from_utf8_lossy(&output.stderr));
+    if !output.status.success() {
+        log::error!("Nginx test failed");
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(anyhow!(err));
     }
+
+    log::info!("Nginx test is successful");
+    Ok(())
 }
 
-pub fn reload_nginx() {
+pub fn reload_nginx() -> Result<()> {
     let output = Command::new("systemctl")
         .arg("reload")
         .arg("nginx")
         .output()
-        .expect("failed to execute process");
+        .context("Unable to reload nginx, is it installed?")?;
 
-    if output.status.success() {
-        println!("Nginx reload is successful");
-    } else {
-        println!(
-            "Nginx reload
- failed"
-        );
-        panic!("{}", String::from_utf8_lossy(&output.stderr));
+    if !output.status.success() {
+        log::error!("Nginx reload  failed");
+
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(anyhow!(err));
     }
+
+    log::info!("Nginx reload is successful");
+    Ok(())
+}
+
+pub fn init_env() {
+    env::set_var("RUST_LOG", "Info");
+
+    env_logger::builder()
+        .format(|buf, record| {
+            let mut style = buf.style();
+
+            let color = match record.level() {
+                Level::Error => Color::Red,
+                Level::Warn => Color::Yellow,
+                _ => Color::Rgb(0, 144, 55),
+            };
+
+            style.set_color(color);
+
+            writeln!(buf, "{}: {}", style.value(record.level()), record.args())
+        })
+        .init();
 }
