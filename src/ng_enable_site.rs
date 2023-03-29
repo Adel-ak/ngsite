@@ -17,6 +17,8 @@ fn get_site_names() -> Result<Vec<FileData>> {
         }
     }
 
+    list.sort_by(|a, b| b.file_name.cmp(&a.file_name));
+
     Ok(list)
 }
 

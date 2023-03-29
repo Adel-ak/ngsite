@@ -12,6 +12,8 @@ fn get_site_names() -> Result<Vec<FileData>> {
         list.push(file)
     }
 
+    list.sort_by(|a, b| b.file_name.cmp(&a.file_name));
+
     Ok(list)
 }
 
@@ -19,7 +21,6 @@ pub fn ng_edit_site() -> Result<()> {
     let list: Vec<FileData> = get_site_names()?;
     if !list.is_empty() {
         let selections: Vec<String> = list.into_iter().map(|x| x.file_name).collect();
-
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Pick site")
             .default(0)
