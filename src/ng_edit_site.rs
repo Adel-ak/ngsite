@@ -12,7 +12,7 @@ fn get_site_names() -> Result<Vec<FileData>> {
         list.push(file)
     }
 
-    list.sort_by(|a, b| b.file_name.cmp(&a.file_name));
+    list.sort_by(|a, b| a.file_name.cmp(&b.file_name));
 
     Ok(list)
 }
