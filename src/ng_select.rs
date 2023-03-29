@@ -1,14 +1,17 @@
 use dialoguer::{theme::ColorfulTheme, Select};
-use strum::Display;
+use strum::{Display, EnumIter, IntoEnumIterator};
 
-#[derive(Debug, Display, Clone, Copy)]
+#[derive(Debug, Display, Clone, Copy, EnumIter)]
 pub enum NgSelect {
     Enable,
     Disable,
+    Edit,
+    Test,
+    Reload,
 }
 
 pub fn ng_select() -> NgSelect {
-    let selections = &[NgSelect::Enable, NgSelect::Disable];
+    let selections: Vec<_> = NgSelect::iter().collect();
 
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("")

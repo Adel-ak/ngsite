@@ -21,8 +21,8 @@ pub struct FileData {
 
 pub fn walk_folder(folder: &str) -> Result<HashMap<String, FileData>> {
     let mut files: HashMap<String, FileData> = HashMap::new();
-    let folder_name = format!("/etc/nginx/{}", folder);
-    let iter = WalkDir::new(&folder_name).max_depth(1);
+    let folder_path = format!("/etc/nginx/{}", folder);
+    let iter = WalkDir::new(&folder_path).max_depth(1);
     for entry in iter {
         let entry = entry?;
         let file_name: String = entry.file_name().to_string_lossy().into();
@@ -102,7 +102,26 @@ pub fn reload_nginx() -> Result<()> {
         return Err(anyhow!(err));
     }
 
-    log::info!("Nginx reload is successful");
+    log::info!("Nginx reloaded successfully");
+    Ok(())
+}
+
+pub fn edit_nginx_site(file_name: String) -> Result<()> {
+    let file_path = format!("/etc/nginx/{}/{}", AVAILABLE, file_name);
+
+    let output = Command::new("vi")
+        .arg(file_path)
+        .status()
+        .context("Unable to edit file")?;
+
+    if !output.success() {
+        log::error!("Edit failed");
+
+        let err = output.to_string();
+        return Err(anyhow!(err));
+    }
+
+    log::info!("Edit done.");
     Ok(())
 }
 
