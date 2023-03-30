@@ -118,6 +118,7 @@ pub async fn ng_default() -> Result<()> {
         create_dir_all(&default_file.folder_path).await?;
         let mut file = File::create(&default_file.file_path).await?;
         file.write_all(default_file.default_file).await?;
+        log::info!("File created...");
     } else {
         log::info!("File already exists...");
     }
