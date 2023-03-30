@@ -3,11 +3,19 @@ use strum::{Display, EnumIter, IntoEnumIterator};
 
 #[derive(Debug, Display, Clone, Copy, EnumIter)]
 pub enum NgSelect {
+    #[strum(serialize = "Create Default")]
+    NgDefault,
+    #[strum(serialize = "Enable Site")]
     Enable,
+    #[strum(serialize = "Disable Site")]
     Disable,
+    #[strum(serialize = "Edit Site")]
     Edit,
+    #[strum(serialize = "Test Nginx")]
     Test,
+    #[strum(serialize = "Reload Nginx")]
     Reload,
+    Exit,
 }
 
 pub fn ng_select() -> NgSelect {
