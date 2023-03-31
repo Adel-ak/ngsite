@@ -1,11 +1,9 @@
 use anyhow::Result;
-use dialoguer::{theme::ColorfulTheme, Select};
+use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use std::{collections::HashMap, path::Path};
 use strum::{Display, EnumIter, IntoEnumIterator};
-use tokio::{
-    fs::{create_dir_all, File},
-    io::AsyncWriteExt,
-};
+use tokio::fs::{create_dir_all, File};
+use tokio::io::AsyncWriteExt;
 
 #[derive(Eq, Hash, PartialEq, Debug, Display, Clone, Copy, EnumIter)]
 enum NgDefaults {
@@ -102,26 +100,29 @@ pub async fn ng_default() -> Result<()> {
         ),
     ]);
 
-    let selections: Vec<_> = NgDefaults::iter().collect();
+    let multi_selections: Vec<_> = NgDefaults::iter().collect();
 
-    let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Pick one")
-        .default(0)
-        .items(&selections[..])
+    let selections = MultiSelect::with_theme(&ColorfulTheme::default())
+        .with_prompt("Pick one or more")
+        .items(&multi_selections[..])
         .interact()?;
 
-    let selected = selections[selection];
-    let default_file = default_files.get(&selected).unwrap();
-    let file_exists = Path::new(&default_file.file_path).exists();
+    for selection in selections {
+        let selected = multi_selections[selection];
+        let default_file = default_files.get(&selected).unwrap();
 
-    if !file_exists {
-        create_dir_all(&default_file.folder_path).await?;
-        let mut file = File::create(&default_file.file_path).await?;
-        file.write_all(default_file.default_file).await?;
-        log::info!("File created...");
-    } else {
-        log::info!("File already exists...");
+        log::info!("Creating {}...", default_file.file_path);
+
+        let file_exists = Path::new(&default_file.file_path).exists();
+
+        if !file_exists {
+            create_dir_all(&default_file.folder_path).await?;
+            let mut file = File::create(&default_file.file_path).await?;
+            file.write_all(default_file.default_file).await?;
+            log::info!("File created...");
+        } else {
+            log::warn!("{} File already exists...", default_file.file_path);
+        }
     }
-
     Ok(())
 }
