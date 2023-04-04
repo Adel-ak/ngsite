@@ -9,6 +9,8 @@ use tokio::{
 
 #[derive(Eq, Hash, PartialEq, Debug, Display, Clone, Copy, EnumIter)]
 enum NgDefaults {
+    #[strum(serialize = "nginx.conf")]
+    NginxConf,
     #[strum(serialize = "example.com")]
     ExampleCom,
     #[strum(serialize = "proxy.com")]
