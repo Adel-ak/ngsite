@@ -1,5 +1,6 @@
 use anyhow::Result;
-use dialoguer::{theme::ColorfulTheme, MultiSelect};
+use dialoguer::{theme::ColorfulTheme, Input, MultiSelect};
+use std::path::PathBuf;
 use std::{collections::HashMap, path::Path};
 use strum::{Display, EnumIter, IntoEnumIterator};
 use tokio::fs::{create_dir_all, File};
@@ -27,24 +28,24 @@ enum NgDefaults {
 
 #[derive(Debug, Clone)]
 struct FileMetaData {
-    file_path: String,
-    folder_path: String,
+    file_path: Box<PathBuf>,
     default_file: &'static [u8],
+    file_name: String,
 }
 
 impl FileMetaData {
     fn new(
-        folder_path: impl Into<String>,
+        file_path: impl Into<String>,
         file_name: impl Into<String>,
         default_file: &'static [u8],
     ) -> Self {
         let file_name = file_name.into();
-        let folder_path = folder_path.into();
-        let file_path = format!("{folder_path}/{file_name}");
+        let file_path = file_path.into();
+        let file_path = Path::new(&file_path).join(&file_name);
 
         Self {
-            file_path,
-            folder_path,
+            file_name,
+            file_path: Box::new(file_path),
             default_file,
         }
     }
@@ -54,6 +55,14 @@ impl FileMetaData {
 
 pub async fn ng_default() -> Result<()> {
     let default_files: HashMap<NgDefaults, FileMetaData> = HashMap::from([
+        (
+            NgDefaults::NginxConf,
+            FileMetaData::new(
+                "/etc/nginx",
+                "nginx.conf",
+                include_bytes!("./defaults/nginx.conf"),
+            ),
+        ),
         (
             NgDefaults::DefaultServer,
             FileMetaData::new(
@@ -121,19 +130,38 @@ pub async fn ng_default() -> Result<()> {
 
     for selection in selections {
         let selected = multi_selections[selection];
-        let default_file = default_files.get(&selected).unwrap();
+        let default_file: FileMetaData = match selected {
+            NgDefaults::ExampleCom | NgDefaults::ProxyCom => {
+                let default_file = default_files.get(&selected).unwrap();
 
-        log::info!("Creating {}...", default_file.file_path);
+                let domain: String = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Domain name")
+                    .default(default_file.file_name.clone())
+                    .interact_text()
+                    .unwrap();
 
-        let file_exists = Path::new(&default_file.file_path).exists();
+                let dir = default_file.file_path.parent().unwrap().to_str().unwrap();
+
+                FileMetaData::new(dir, domain, default_file.default_file)
+            }
+            _ => default_files.get(&selected).unwrap().clone(),
+        };
+
+        let file_path = default_file.file_path;
+        let file_name = file_path.file_name().unwrap();
+
+        log::info!("Creating {:?}...", file_name);
+
+        let file_exists = file_path.exists();
 
         if !file_exists {
-            create_dir_all(&default_file.folder_path).await?;
-            let mut file = File::create(&default_file.file_path).await?;
+            create_dir_all(&file_path.parent().unwrap()).await?;
+            let mut file = File::create(*file_path).await?;
+
             file.write_all(default_file.default_file).await?;
             log::info!("File created...");
         } else {
-            log::warn!("{} File already exists...", default_file.file_path);
+            log::warn!("{:?} File already exists...", file_name);
         }
     }
     Ok(())
