@@ -9,6 +9,8 @@ pub enum NgSelect {
     Enable,
     #[strum(serialize = "Disable Site")]
     Disable,
+    #[strum(serialize = "View Site")]
+    View,
     #[strum(serialize = "Edit Site")]
     Edit,
     #[strum(serialize = "Test Nginx")]

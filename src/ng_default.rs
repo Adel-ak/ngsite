@@ -7,6 +7,8 @@ use tokio::io::AsyncWriteExt;
 
 #[derive(Eq, Hash, PartialEq, Debug, Display, Clone, Copy, EnumIter)]
 enum NgDefaults {
+    #[strum(serialize = "default server")]
+    DefaultServer,
     #[strum(serialize = "nginx.conf")]
     NginxConf,
     #[strum(serialize = "example.com")]
@@ -52,6 +54,14 @@ impl FileMetaData {
 
 pub async fn ng_default() -> Result<()> {
     let default_files: HashMap<NgDefaults, FileMetaData> = HashMap::from([
+        (
+            NgDefaults::DefaultServer,
+            FileMetaData::new(
+                "/etc/nginx/sites-available",
+                "default_server",
+                include_bytes!("./defaults/default_server"),
+            ),
+        ),
         (
             NgDefaults::ExampleCom,
             FileMetaData::new(

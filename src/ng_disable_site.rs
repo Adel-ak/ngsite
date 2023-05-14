@@ -2,10 +2,10 @@ use crate::utils::{reload_nginx, rm_symlink, test_nginx, walk_folder, FileData, 
 use anyhow::Result;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 
-fn get_site_names() -> Result<Vec<FileData>> {
+async fn get_site_names() -> Result<Vec<FileData>> {
     let mut list: Vec<FileData> = vec![];
 
-    let enabled = walk_folder(ENABLED)?;
+    let enabled = walk_folder(ENABLED).await?;
 
     for (_, file) in enabled {
         if file.is_symlink {
@@ -18,8 +18,8 @@ fn get_site_names() -> Result<Vec<FileData>> {
     Ok(list)
 }
 
-pub fn ng_disable_site() -> Result<()> {
-    let list: Vec<FileData> = get_site_names()?;
+pub async fn ng_disable_site() -> Result<()> {
+    let list: Vec<FileData> = get_site_names().await?;
     if !list.is_empty() {
         let multi_selections: Vec<String> = list.into_iter().map(|x| x.file_name).collect();
 
@@ -30,9 +30,9 @@ pub fn ng_disable_site() -> Result<()> {
 
         if !selections.is_empty() {
             for selection in selections {
-                let file_to_link = multi_selections[selection].clone();
+                let file_to_unlink = multi_selections[selection].clone();
 
-                if let Err(err) = rm_symlink(file_to_link) {
+                if let Err(err) = rm_symlink(file_to_unlink).await {
                     log::error!("Failed to symlink...");
                     return Err(err);
                 }

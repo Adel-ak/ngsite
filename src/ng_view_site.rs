@@ -1,5 +1,4 @@
-use crate::ng_test_reload::ng_test_reload;
-use crate::utils::{edit_nginx_site, walk_folder, FileData, AVAILABLE};
+use crate::utils::{view_nginx_site, walk_folder, FileData, AVAILABLE};
 use anyhow::Result;
 use dialoguer::{theme::ColorfulTheme, Select};
 
@@ -17,7 +16,7 @@ async fn get_site_names() -> Result<Vec<FileData>> {
     Ok(list)
 }
 
-pub async fn ng_edit_site() -> Result<()> {
+pub async fn ng_view_site() -> Result<()> {
     let list: Vec<FileData> = get_site_names().await?;
     if !list.is_empty() {
         let selections: Vec<String> = list.into_iter().map(|x| x.file_name).collect();
@@ -29,10 +28,9 @@ pub async fn ng_edit_site() -> Result<()> {
 
         let selected_site = selections[selection].clone();
 
-        edit_nginx_site(selected_site)?;
-        ng_test_reload()?;
+        view_nginx_site(selected_site).await?;
     } else {
-        log::info!("No sites found to edit...");
+        log::info!("No sites found to view...");
     }
 
     Ok(())

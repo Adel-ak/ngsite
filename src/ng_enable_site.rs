@@ -2,10 +2,10 @@ use crate::utils::{reload_nginx, sym_link, test_nginx, walk_folder, FileData, AV
 use anyhow::Result;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 
-fn get_site_names() -> Result<Vec<FileData>> {
+async fn get_site_names() -> Result<Vec<FileData>> {
     let mut list: Vec<FileData> = vec![];
-    let available = walk_folder(AVAILABLE)?;
-    let enabled = walk_folder(ENABLED)?;
+    let available = walk_folder(AVAILABLE).await?;
+    let enabled = walk_folder(ENABLED).await?;
 
     for (key, file) in available {
         if let Some(enabled_file) = enabled.get(&key) {
@@ -22,8 +22,8 @@ fn get_site_names() -> Result<Vec<FileData>> {
     Ok(list)
 }
 
-pub fn ng_enable_site() -> Result<()> {
-    let list: Vec<FileData> = get_site_names()?;
+pub async fn ng_enable_site() -> Result<()> {
+    let list: Vec<FileData> = get_site_names().await?;
     if !list.is_empty() {
         let multi_selections: Vec<String> = list.into_iter().map(|x| x.file_name).collect();
 
@@ -35,7 +35,7 @@ pub fn ng_enable_site() -> Result<()> {
         if !selections.is_empty() {
             for selection in selections {
                 let file_to_link = multi_selections[selection].clone();
-                sym_link(file_to_link)?;
+                sym_link(file_to_link).await?;
             }
 
             test_nginx()?;
