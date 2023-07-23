@@ -1,41 +1,43 @@
-use anyhow::Context;
-use anyhow::{anyhow, Result};
+use crate::config::CONFIG;
+use anyhow::{anyhow, Context, Result};
+use async_compression::tokio::bufread::GzipDecoder;
 use async_recursion::async_recursion;
 use env_logger::fmt::Color;
 use log::Level;
+use minus::{page_all, ExitStrategy, LineNumbers, MinusError, Pager};
+use serde_json::Value;
 use std::collections::HashMap;
-use std::env;
+use std::env::{set_var, var_os};
 use std::fs::remove_file;
-use std::io::ErrorKind;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::os::unix::fs::symlink;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::fs::{create_dir_all, File};
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, BufReader};
 use walkdir::WalkDir;
+use which::which;
 
-pub const AVAILABLE: &str = "sites-available";
-pub const ENABLED: &str = "sites-enabled";
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileData {
     pub file_name: String,
+    pub file_path: String,
     pub is_symlink: bool,
 }
 
 pub async fn walk_folder(folder: &str) -> Result<HashMap<String, FileData>> {
     let mut files: HashMap<String, FileData> = HashMap::new();
-    let dir = Path::new("/etc/nginx").join(folder);
+    let dir = Path::new(folder);
 
     if !dir.exists() {
         create_dir_all(&dir).await?;
     }
 
-    let iter = WalkDir::new(&dir).max_depth(1);
+    let iter = WalkDir::new(dir).max_depth(1);
     for entry in iter {
         let entry = entry?;
         let file_name: String = entry.file_name().to_string_lossy().into();
+        let file_path: String = entry.path().to_string_lossy().into();
         let is_symlink = entry.path_is_symlink();
         let is_dir = entry.into_path().is_dir();
 
@@ -46,6 +48,7 @@ pub async fn walk_folder(folder: &str) -> Result<HashMap<String, FileData>> {
         let key = file_name.clone();
         let value = FileData {
             file_name,
+            file_path,
             is_symlink,
         };
 
@@ -57,8 +60,8 @@ pub async fn walk_folder(folder: &str) -> Result<HashMap<String, FileData>> {
 
 #[async_recursion]
 pub async fn sym_link(file: String) -> Result<()> {
-    let available_dir = Path::new("/etc/nginx").join(AVAILABLE);
-    let enabled_dir = Path::new("/etc/nginx").join(ENABLED);
+    let available_dir = Path::new(&CONFIG.paths.sites_available);
+    let enabled_dir = Path::new(&CONFIG.paths.sites_enabled);
 
     if !enabled_dir.exists() {
         create_dir_all(&enabled_dir).await?;
@@ -72,7 +75,7 @@ pub async fn sym_link(file: String) -> Result<()> {
     let available_path = available_dir.join(&file);
 
     if !available_path.exists() {
-        log::error!("Failed to symlink, file not found");
+        error!("Failed to symlink, file not found");
 
         return Ok(());
     }
@@ -85,7 +88,7 @@ pub async fn sym_link(file: String) -> Result<()> {
             return sym_link(file).await;
         }
 
-        log::error!("Failed to symlink");
+        error!("Failed to symlink");
         return Err(err.into());
     }
 
@@ -93,7 +96,7 @@ pub async fn sym_link(file: String) -> Result<()> {
 }
 
 pub async fn rm_symlink(file_name: String) -> Result<()> {
-    let enabled_dir = Path::new("/etc/nginx").join(ENABLED);
+    let enabled_dir = Path::new(&CONFIG.paths.sites_available);
     let file_path = enabled_dir.join(file_name);
 
     if file_path.exists() {
@@ -104,71 +107,67 @@ pub async fn rm_symlink(file_name: String) -> Result<()> {
 }
 
 pub fn test_nginx() -> Result<()> {
-    let output = Command::new("nginx")
-        .arg("-t")
-        .output()
-        .context("Unable to test nginx, is it installed?")?;
+    let nginx_path = get_command_path("nginx")?;
+    let output = Command::new(nginx_path).arg("-t").output()?;
 
     if !output.status.success() {
-        log::error!("Nginx test failed");
+        error!("Nginx test failed");
         let err = String::from_utf8_lossy(&output.stderr).to_string();
         return Err(anyhow!(err));
     }
 
-    log::info!("Nginx test is successful");
+    info!("Nginx test is successful");
     Ok(())
 }
 
 pub fn reload_nginx() -> Result<()> {
-    let output = Command::new("systemctl")
+    let systemctl_path = get_command_path("systemctl")?;
+    let output = Command::new(systemctl_path)
         .arg("reload")
         .arg("nginx")
-        .output()
-        .context("Unable to reload nginx, is it installed?")?;
+        .output()?;
 
     if !output.status.success() {
-        log::error!("Nginx reload  failed");
+        error!("Nginx reload  failed");
 
         let err = String::from_utf8_lossy(&output.stderr).to_string();
         return Err(anyhow!(err));
     }
 
-    log::info!("Nginx reloaded successfully");
+    info!("Nginx reloaded successfully");
     Ok(())
 }
 
 pub fn edit_nginx_site(file_name: String) -> Result<()> {
-    let available_dir = Path::new("/etc/nginx").join(AVAILABLE);
+    let available_dir = Path::new(&CONFIG.paths.sites_available);
     let file_path = available_dir.join(file_name);
 
     if !file_path.exists() {
-        log::info!("File not found.");
+        info!("File not found.");
 
         return Ok(());
     }
 
-    let output = Command::new("vi")
-        .arg(file_path)
-        .status()
-        .context("Unable to edit file")?;
+    let vi_path = get_command_path("vi")?;
+    let output = Command::new(vi_path).arg(file_path).status()?;
 
     if !output.success() {
-        log::error!("Edit failed");
+        error!("Edit failed");
 
         let err = output.to_string();
         return Err(anyhow!(err));
     }
 
-    log::info!("Edit done.");
+    info!("Edit done.");
     Ok(())
 }
 
 pub async fn view_nginx_site(file_name: String) -> Result<()> {
-    let available_dir = Path::new("/etc/nginx").join(AVAILABLE);
+    let available_dir = Path::new(&CONFIG.paths.sites_available);
     let file_path = available_dir.join(&file_name);
 
     if !file_path.exists() {
-        log::info!("File not found.");
+        info!("File not found.");
 
         return Ok(());
     }
@@ -184,22 +183,165 @@ pub async fn view_nginx_site(file_name: String) -> Result<()> {
     Ok(())
 }
 
-pub fn init_env() {
-    env::set_var("RUST_LOG", "Info");
+pub async fn view_log_file(file_name: String) -> Result<()> {
+    let logs_dir = Path::new(&CONFIG.paths.logs);
+    let file_path = logs_dir.join(&file_name);
+
+    if !file_path.exists() {
+        info!("File not found.");
+
+        return Ok(());
+    }
+
+    let log = if is_gzip(file_path.to_string_lossy())? {
+        read_gzip_log(file_path).await?
+    } else {
+        read_log(file_path).await?
+    };
+
+    cli_pager(log, &file_name).await?;
+
+    // let cat_path = get_command_path(command)?;
+
+    // let output = Command::new(cat_path).arg(file_path).status()?;
+
+    // if !output.success() {
+    //     error!("Edit viewing log");
+
+    //     let err = output.to_string();
+    //     return Err(anyhow!(err));
+    // }
+
+    // Command::new(command)
+    //     .arg("-vt")
+    //     .arg(&file.into())
+    //     .output()?;
+
+    // let mut file = File::open(file_path).await?;
+    // let mut buffer = String::new();
+
+    // file.read_to_string(&mut buffer).await?;
+
+    // println!("---------------------- Start of {file_name} ----------------------");
+    // println!("{buffer}");
+    // println!("---------------------- End of {file_name} ----------------------");
+    Ok(())
+}
+
+async fn read_gzip_log(file_path: PathBuf) -> Result<String> {
+    let mut buffer = String::new();
+
+    let file = File::open(file_path).await?;
+    let file = BufReader::new(file);
+    let mut file = GzipDecoder::new(file);
+
+    file.read_to_string(&mut buffer).await?;
+
+    Ok(buffer)
+}
+
+async fn read_log(file_path: PathBuf) -> Result<String> {
+    let mut buffer = String::new();
+
+    let mut file = File::open(file_path).await?;
+
+    file.read_to_string(&mut buffer).await?;
+
+    Ok(buffer)
+}
+
+pub fn init_logger() {
+    // Set the RUST_LOG, if it hasn't been explicitly defined
+    let var_key = "NGSITE_LOG";
+
+    if var_os(var_key).is_none() {
+        let var_value = ["debug"];
+        set_var(var_key, var_value.join(","));
+    }
 
     env_logger::builder()
         .format(|buf, record| {
             let mut style = buf.style();
-
-            let color = match record.level() {
+            let level = record.level();
+            let style_color = match level {
                 Level::Error => Color::Red,
                 Level::Warn => Color::Yellow,
-                _ => Color::Rgb(0, 144, 55),
+                Level::Info => Color::Green,
+                Level::Debug => Color::Blue,
+                Level::Trace => Color::Magenta,
             };
 
-            style.set_color(color);
+            style.set_color(style_color);
 
-            writeln!(buf, "{}: {}", style.value(record.level()), record.args())
+            writeln!(buf, "[{}] - {}", style.value(level), record.args())
         })
         .init();
+}
+
+pub fn get_command_path(path: impl Into<String>) -> Result<PathBuf> {
+    let path_string: String = path.into();
+    let path_result = which(&path_string).context(format!("{path_string} not found"))?;
+    Ok(path_result)
+}
+
+pub fn merge_config(
+    default_config: &mut Value,
+    user_config: Value,
+) {
+    match (default_config, user_config) {
+        (a @ &mut Value::Object(_), Value::Object(b)) => {
+            let a = a.as_object_mut().unwrap();
+            for (k, v) in b {
+                merge_config(a.entry(k).or_insert(Value::Null), v);
+            }
+        }
+        (a, b) => *a = b,
+    }
+}
+
+pub fn is_root() -> bool {
+    users::get_current_uid() == 0
+}
+
+pub fn is_gzip(file: impl Into<String>) -> Result<bool> {
+    let gzip_path = get_command_path("gzip")?;
+
+    let output = Command::new(gzip_path)
+        .arg("-vt")
+        .arg(&file.into())
+        .output()?;
+
+    let err = String::from_utf8_lossy(&output.stderr).to_string();
+
+    Ok(!err.contains("NOT"))
+}
+
+pub async fn cli_pager(
+    log: String,
+    prompt: &String,
+) -> Result<(), MinusError> {
+    let pager = Pager::new();
+
+    pager.set_exit_strategy(ExitStrategy::PagerQuit)?;
+    pager.set_line_numbers(LineNumbers::AlwaysOn)?;
+    pager.set_prompt(prompt)?;
+    pager.set_run_no_overflow(true)?;
+
+    let ignore_values_in_log = CONFIG.ignore_values_in_log.iter();
+    let ignore_values_in_log_ref = ignore_values_in_log.as_ref();
+
+    'outer: for line in log.lines().rev() {
+        for skip_value in ignore_values_in_log_ref {
+            if line.contains(skip_value) {
+                continue 'outer;
+            }
+        }
+
+        pager.push_str(line)?;
+        pager.push_str("\n")?;
+    }
+
+    page_all(pager)?;
+
+    Ok(())
 }

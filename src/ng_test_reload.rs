@@ -24,7 +24,7 @@ pub fn ng_test_reload() -> Result<()> {
         test_nginx()?;
         reload_nginx()?;
     } else {
-        log::info!("Skipping test and reload...");
+        info!("Skipping test and reload...");
     }
 
     Ok(())

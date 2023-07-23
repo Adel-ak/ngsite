@@ -150,7 +150,7 @@ pub async fn ng_default() -> Result<()> {
         let file_path = default_file.file_path;
         let file_name = file_path.file_name().unwrap();
 
-        log::info!("Creating {:?}...", file_name);
+        info!("Creating {:?}...", file_name);
 
         let file_exists = file_path.exists();
 
@@ -159,9 +159,9 @@ pub async fn ng_default() -> Result<()> {
             let mut file = File::create(*file_path).await?;
 
             file.write_all(default_file.default_file).await?;
-            log::info!("File created...");
+            info!("File created...");
         } else {
-            log::warn!("{:?} File already exists...", file_name);
+            warn!("{:?} File already exists...", file_name);
         }
     }
     Ok(())
