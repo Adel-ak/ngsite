@@ -201,30 +201,6 @@ pub async fn view_log_file(file_name: String) -> Result<()> {
 
     cli_pager(log, &file_name).await?;
 
-    // let cat_path = get_command_path(command)?;
-
-    // let output = Command::new(cat_path).arg(file_path).status()?;
-
-    // if !output.success() {
-    //     error!("Edit viewing log");
-
-    //     let err = output.to_string();
-    //     return Err(anyhow!(err));
-    // }
-
-    // Command::new(command)
-    //     .arg("-vt")
-    //     .arg(&file.into())
-    //     .output()?;
-
-    // let mut file = File::open(file_path).await?;
-    // let mut buffer = String::new();
-
-    // file.read_to_string(&mut buffer).await?;
-
-    // println!("---------------------- Start of {file_name} ----------------------");
-    // println!("{buffer}");
-    // println!("---------------------- End of {file_name} ----------------------");
     Ok(())
 }
 
@@ -311,9 +287,7 @@ pub fn is_gzip(file: impl Into<String>) -> Result<bool> {
         .arg(&file.into())
         .output()?;
 
-    let err = String::from_utf8_lossy(&output.stderr).to_string();
-
-    Ok(!err.contains("NOT"))
+    Ok(output.status.success())
 }
 
 pub async fn cli_pager(
