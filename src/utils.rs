@@ -96,7 +96,7 @@ pub async fn sym_link(file: String) -> Result<()> {
 }
 
 pub async fn rm_symlink(file_name: String) -> Result<()> {
-    let enabled_dir = Path::new(&CONFIG.paths.sites_available);
+    let enabled_dir = Path::new(&CONFIG.paths.sites_enabled);
     let file_path = enabled_dir.join(file_name);
 
     if file_path.exists() {

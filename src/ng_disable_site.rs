@@ -31,7 +31,6 @@ pub async fn ng_disable_site() -> Result<()> {
         if !selections.is_empty() {
             for selection in selections {
                 let file_to_unlink = multi_selections[selection].clone();
-
                 if let Err(err) = rm_symlink(file_to_unlink).await {
                     error!("Failed to symlink...");
                     return Err(err);
