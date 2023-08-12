@@ -2,6 +2,6 @@ ignore_values_in_log = ["91.140.195.26", "127.0.0.1"]
 
 [paths]
 nginx = "/etc/nginx"
-sites_available = "/etc/nginx/sites_available"
+sites_available = "/etc/nginx/sites-available"
 sites_enabled = "/etc/nginx/sites-enabled"
 logs = "/var/log/nginx"
